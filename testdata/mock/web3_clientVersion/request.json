@@ -1,0 +1,6 @@
+{
+  "jsonrpc": "",
+  "id": "4d65822107fcfd52",
+  "method": "web3_clientVersion",
+  "params": []
+}
