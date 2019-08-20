@@ -1,0 +1,13 @@
+{
+  "jsonrpc": "2.0",
+  "id": "4d65822107fcfd52",
+  "method": "trace_replayBlockTransactions",
+  "params": [
+    "0x2dc6c0",
+    [
+      "vmTrace",
+      "trace",
+      "stateDiff"
+    ]
+  ]
+}

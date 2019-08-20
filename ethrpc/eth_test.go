@@ -2,13 +2,21 @@ package ethrpc
 
 import (
 	"encoding/hex"
+	"flag"
+	"fmt"
 	"testing"
+
+	"github.com/alethio/web3-go/types"
+
+	"github.com/alethio/web3-go/thelper"
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/alethio/web3-go/ethrpc/provider/httprpc"
 	mock "github.com/alethio/ethmock/server"
+	"github.com/alethio/web3-go/ethrpc/provider/httprpc"
 )
+
+var update = flag.Bool("update", false, "update golden files")
 
 func TestRequests(t *testing.T) {
 	eth, teardown := setup(t)
@@ -78,6 +86,30 @@ func TestRequests(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, expected, actual)
 		},
+		"TraceBlock": func(t *testing.T) {
+			blockNumber := "0x2dc6c0"
+			fn := fmt.Sprintf("../testdata/TraceBlock_%s.golden", blockNumber)
+
+			actual, err := eth.TraceBlock(blockNumber)
+			thelper.SaveOnUpdate(t, update, fn, actual)
+			var expected []types.Trace
+			thelper.Load(t, fn, &expected)
+
+			assert.NoError(t, err)
+			assert.Equal(t, expected, actual)
+		},
+		"TraceReplayBlockTransactions": func(t *testing.T) {
+			blockNumber := "0x2dc6c0"
+			fn := fmt.Sprintf("../testdata/TraceReplayBlockTransactions_%s.golden", blockNumber)
+
+			actual, err := eth.TraceReplayBlockTransactions(blockNumber, "vmTrace", "trace", "stateDiff")
+			thelper.SaveOnUpdate(t, update, fn, actual)
+			var expected []types.TransactionReplay
+			thelper.Load(t, fn, &expected)
+
+			assert.NoError(t, err)
+			assert.Equal(t, expected, actual)
+		},
 	}
 
 	for n, fn := range tests {
@@ -87,7 +119,6 @@ func TestRequests(t *testing.T) {
 
 func setup(t *testing.T) (*ETH, func() error) {
 	t.Helper()
-
 	srv, err := mock.New(8545, "../testdata/mock")
 	assert.Nil(t, err)
 	go srv.Serve()

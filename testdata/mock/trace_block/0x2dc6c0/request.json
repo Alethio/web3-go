@@ -1,0 +1,8 @@
+{
+  "jsonrpc": "2.0",
+  "id": "4d65822107fcfd52",
+  "method": "trace_block",
+  "params": [
+    "0x2dc6c0"
+  ]
+}
