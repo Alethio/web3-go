@@ -4,12 +4,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/alethio/web3-go/strhelper"
-	"github.com/alethio/web3-go/types"
 	"log"
 	"math/big"
 	"strconv"
 	"strings"
+
+	"github.com/alethio/web3-go/strhelper"
+	"github.com/alethio/web3-go/types"
 
 	"github.com/alethio/web3-go/etherr"
 	"github.com/alethio/web3-go/ethrpc/provider"
@@ -60,8 +61,15 @@ func (e *ETH) GetBlockTransactionCountByNumber(number string) (count string, err
 	return
 }
 
-// GetUncleByBlockNumberAndIndex retrieves the index-nth uncle of the
+// GetUncleByBlockHashAndIndex retrieves the index-nth uncle of the
 // block with the hash blockHash
+func (e *ETH) GetUncleByBlockHashAndIndex(hash string, index string) (b types.Block, err error) {
+	err = e.MakeRequest(&b, ETHGetUncleByBlockHashAndIndex, hash, index)
+	return
+}
+
+// GetUncleByBlockNumberAndIndex retrieves the index-nth uncle of the
+// block with the number blockNumber
 func (e *ETH) GetUncleByBlockNumberAndIndex(blockNumber string, index string) (b types.Block, err error) {
 	err = e.MakeRequest(&b, ETHGetUncleByBlockNumberAndIndex, blockNumber, index)
 	return
@@ -243,6 +251,19 @@ func (e *ETH) GetCode(a string) ([]byte, error) {
 
 	s = strings.TrimPrefix(s, "0x")
 	return hex.DecodeString(s)
+}
+
+// Traces
+func (e *ETH) TraceBlock(blockNumber string) ([]types.Trace, error) {
+	var traces []types.Trace
+	err := e.MakeRequest(&traces, TraceBlock, blockNumber)
+	return traces, err
+}
+
+func (e *ETH) TraceReplayBlockTransactions(blockNumber string, traceTypes ...string) ([]types.TransactionReplay, error) {
+	var replays []types.TransactionReplay
+	err := e.MakeRequest(&replays, TraceReplayBlockTransactions, blockNumber, traceTypes)
+	return replays, err
 }
 
 // NewHeadsSubscription eth_subscribe to newHeads

@@ -25,9 +25,14 @@ const (
 	ETHGetFilterChanges                 = "eth_getFilterChanges"
 	ETHGetTransactionByHash             = "eth_getTransactionByHash"
 	ETHGetTransactionReceipt            = "eth_getTransactionReceipt"
+	ETHGetUncleByBlockHashAndIndex      = "eth_getUncleByBlockHashAndIndex"
 	ETHGetUncleByBlockNumberAndIndex    = "eth_getUncleByBlockNumberAndIndex"
 	ETHPendingTransactionFilter         = "eth_newPendingTransactionFilter"
 	ETHSubscribe                        = "eth_subscribe"
+
+	// trace
+	TraceBlock                   = "trace_block"
+	TraceReplayBlockTransactions = "trace_replayBlockTransactions"
 
 	// eth pubsub
 	ETHNewHeads               = "newHeads"

@@ -2,8 +2,9 @@ package ethrpc
 
 import (
 	"encoding/json"
-	"github.com/alethio/web3-go/types"
 	"math/big"
+
+	"github.com/alethio/web3-go/types"
 )
 
 // ETHInterface defines the packages interface
@@ -29,8 +30,11 @@ type ETHInterface interface {
 	GetTokenBalanceAtBlock(address, token, blockNumber string) (*big.Int, error)
 	GetTransactionByHash(hash string) (types.Transaction, error)
 	GetTransactionReceipt(hash string) (r types.Receipt, err error)
+	GetUncleByBlockHashAndIndex(hash string, index string) (b types.Block, err error)
 	GetUncleByBlockNumberAndIndex(blockNumber string, index string) (b types.Block, err error)
 	GetVersion() (ver string, err error)
+	TraceBlock(blockNumber string) ([]types.Trace, error)
+	TraceReplayBlockTransactions(blockNumber string, traceTypes ...string) ([]types.TransactionReplay, error)
 	MakeRequest(result interface{}, method string, params ...interface{}) error
 	NewBlockNumberSubscription() (r chan *int64, err error)
 	NewHeadsSubscription() (r chan *types.BlockHeader, err error)

@@ -72,6 +72,36 @@ func main() {
 		}
 
 		log.Println("code", ba)
+	case "getUncleByBlockHashAndIndex":
+		if len(args) < 3 {
+			log.Fatal("Missing hash and or/index")
+		}
+		b, err := w.eth.GetUncleByBlockHashAndIndex(args[1], args[2])
+		if err != nil {
+			log.Fatal("Eth failed to get block number: ", err)
+		}
+
+		log.Printf("%+v\n", b)
+	case "traceBlock":
+		if len(args) < 2 {
+			log.Fatal("Missing hex block number and/or trace types")
+		}
+		t, err := w.eth.TraceBlock(args[1])
+		if err != nil {
+			log.Fatal("Eth failed to trace block: ", err)
+		}
+
+		log.Printf("%+v\n", t)
+	case "traceReplayBlockTransactions":
+		if len(args) < 3 {
+			log.Fatal("Missing hex block number")
+		}
+		r, err := w.eth.TraceReplayBlockTransactions(args[1], args[2:]...)
+		if err != nil {
+			log.Fatal("Eth failed to replay block: ", err)
+		}
+
+		log.Printf("%+v\n", r)
 	case "newBlockNumberSubscription":
 		blockNumbers, err := w.eth.NewBlockNumberSubscription()
 		if err != nil {
