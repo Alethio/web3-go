@@ -6,8 +6,17 @@ import (
 	"strings"
 )
 
+func (v *Validator) isLoaded(item string) bool {
+	_, exists := v.loadedMap[item]
+	return exists
+}
+
 func (v *Validator) verifyBlock() error {
-	if v.ResponseBlock.Result.Hash == "" {
+	if !v.isLoaded(Block) {
+		return fmt.Errorf("block is mandatory")
+	}
+
+	if v.Block.Hash == "" {
 		return fmt.Errorf("block hash is empty")
 	}
 
@@ -15,12 +24,16 @@ func (v *Validator) verifyBlock() error {
 }
 
 func (v *Validator) verifyUncles() error {
-	if len(v.ResponseUncles) != len(v.ResponseBlock.Result.Uncles) {
+	if !v.isLoaded(Uncles) {
+		return nil
+	}
+
+	if len(v.Uncles) != len(v.Block.Uncles) {
 		return fmt.Errorf("uncles count is different")
 	}
 
-	for i, hash := range v.ResponseBlock.Result.Uncles {
-		if v.ResponseUncles[i].Result.Hash != hash {
+	for i, hash := range v.Block.Uncles {
+		if v.Uncles[i].Hash != hash {
 			return fmt.Errorf("uncle hash at index %d does not match", i)
 		}
 	}
@@ -29,13 +42,17 @@ func (v *Validator) verifyUncles() error {
 }
 
 func (v *Validator) verifyReceipts() error {
-	if len(v.ResponseReceipts) != len(v.ResponseBlock.Result.Transactions) {
+	if !v.isLoaded(Receipts) {
+		return nil
+	}
+
+	if len(v.Receipts) != len(v.Block.Transactions) {
 		return fmt.Errorf("receipts count is different")
 	}
 
-	for i, receipt := range v.ResponseReceipts {
-		tx := v.ResponseBlock.Result.Transactions[i]
-		r := receipt.Result
+	for i, receipt := range v.Receipts {
+		tx := v.Block.Transactions[i]
+		r := receipt
 
 		if r.TransactionHash != tx.Hash {
 			return fmt.Errorf("receipt at index %d does not match transaction hash", i)
@@ -58,20 +75,28 @@ func (v *Validator) verifyReceipts() error {
 }
 
 func (v *Validator) verifyTrace() error {
-	blockHash := v.ResponseBlock.Result.Hash
-	blockNumberInt64, err := strconv.ParseInt(strings.TrimPrefix(v.ResponseBlock.Result.Number, "0x"), 16, 64)
+	if !v.isLoaded(Traces) {
+		return nil
+	}
+
+	if !v.isLoaded(Receipts) {
+		return fmt.Errorf("receipts are mandatory to validate traces")
+	}
+
+	blockHash := v.Block.Hash
+	blockNumberInt64, err := strconv.ParseInt(strings.TrimPrefix(v.Block.Number, "0x"), 16, 64)
 	if err != nil {
 		return err
 	}
 
 	blockNumber := int(blockNumberInt64)
-	uniqueTransactions := make(map[int]string, len(v.ResponseReceipts))
+	uniqueTransactions := make(map[int]string, len(v.Receipts))
 
-	for i, trace := range v.ResponseTrace.Result {
+	for i, trace := range v.Traces {
 		if trace.Type != "reward" {
 			uniqueTransactions[*trace.TransactionPosition] = *trace.TransactionHash
 
-			if v.ResponseBlock.Result.Transactions[*trace.TransactionPosition].Hash != *trace.TransactionHash {
+			if v.Block.Transactions[*trace.TransactionPosition].Hash != *trace.TransactionHash {
 				return fmt.Errorf("trace at index %d does not match transaction hash at position %d", i, *trace.TransactionPosition)
 			}
 		}
@@ -86,7 +111,7 @@ func (v *Validator) verifyTrace() error {
 	}
 
 	// verify that each transaction present on the block has at least one coresponding trace
-	for k, tx := range v.ResponseBlock.Result.Transactions {
+	for k, tx := range v.Block.Transactions {
 		if uniqueTransactions[k] != tx.Hash {
 			return fmt.Errorf("did not find any trace for transaction %s", tx.Hash)
 		}
@@ -96,12 +121,16 @@ func (v *Validator) verifyTrace() error {
 }
 
 func (v *Validator) verifyReplay() error {
-	if len(v.ResponseReplay.Result) != len(v.ResponseBlock.Result.Transactions) {
+	if !v.isLoaded(Replays) {
+		return nil
+	}
+
+	if len(v.Replays) != len(v.Block.Transactions) {
 		return fmt.Errorf("replay count does not match transaction count")
 	}
 
-	for i, replay := range v.ResponseReplay.Result {
-		tx := v.ResponseBlock.Result.Transactions[i]
+	for i, replay := range v.Replays {
+		tx := v.Block.Transactions[i]
 
 		if replay.TransactionHash != nil {
 			if *replay.TransactionHash != tx.Hash {
