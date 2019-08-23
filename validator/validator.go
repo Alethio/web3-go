@@ -6,16 +6,18 @@ import (
 
 // Validator is intended for validating the logical integrity of JSONRPC responses coming from parity
 type Validator struct {
-	ResponseBlock    types.RPCGetBlockByNumberResponse
-	ResponseUncles   []types.RPCGetUncleByBlockHashAndIndex
-	ResponseReceipts []types.RPCGetTransactionReceipt
-	ResponseTrace    types.RPCTraceBlock
-	ResponseReplay   types.RPCTraceReplayBlockTransactions
+	Block types.Block
+	Uncles []types.Block
+	Receipts []types.Receipt
+	Traces []types.Trace
+	Replays []types.TransactionReplay
+	
+	loadedMap map[string]bool
 }
 
 // New returns a new Validator instance
 func New() *Validator {
-	return &Validator{}
+	return &Validator{loadedMap:make(map[string]bool)}
 }
 
 // Run executes all the available verifiers and returns (true, nil) if the block is valid

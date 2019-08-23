@@ -1,23 +1,28 @@
 package validator
 
-import "encoding/json"
+import "github.com/alethio/web3-go/types"
 
-func (v *Validator) LoadBlockResponse(data []byte) error {
-	return json.Unmarshal(data, &v.ResponseBlock)
+func (v *Validator) LoadBlock(block types.Block) {
+	v.Block = block
+	v.loadedMap[Block] = true
 }
 
-func (v *Validator) LoadUnclesResponse(data []byte) error {
-	return json.Unmarshal(data, &v.ResponseUncles)
+func (v *Validator) LoadUncles(uncles []types.Block) {
+	v.Uncles = uncles
+	v.loadedMap[Uncles] = true
 }
 
-func (v *Validator) LoadReceiptsResponse(data []byte) error {
-	return json.Unmarshal(data, &v.ResponseReceipts)
+func (v *Validator) LoadReceipts(receipts []types.Receipt) {
+	v.Receipts = receipts
+	v.loadedMap[Receipts] = true
 }
 
-func (v *Validator) LoadTraceBlockResponse(data []byte) error {
-	return json.Unmarshal(data, &v.ResponseTrace)
+func (v *Validator) LoadTraces(traces []types.Trace) {
+	v.Traces = traces
+	v.loadedMap[Traces] = true
 }
 
-func (v *Validator) LoadReplayResponse(data []byte) error {
-	return json.Unmarshal(data, &v.ResponseReplay)
+func (v *Validator) LoadReplays(replays []types.TransactionReplay) {
+	v.Replays = replays
+	v.loadedMap[Replays] = true
 }
