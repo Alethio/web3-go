@@ -55,7 +55,7 @@ func (p *WSProvider) Start() error {
 
 // Stop closes the websocket connection
 func (p *WSProvider) Stop() {
-	p.client.Close()
+	p.fatality()
 }
 
 // CallRaw calls a RPC method and returns the raw result
@@ -203,6 +203,9 @@ func (p *WSProvider) handlePong(string) error {
 
 func (p *WSProvider) receivePump() {
 	for {
+		if p.dead {
+			return
+		}
 		_, message, err := p.client.ReadMessage()
 		if err != nil {
 			log.Warnf("message read error: %s", err)
@@ -317,6 +320,7 @@ func (p *WSProvider) fatality() {
 	for k := range p.subscriptions {
 		p.unsubscribe(k)
 	}
+	p.client.Close()
 }
 
 // New creates a new WSProvider struct
