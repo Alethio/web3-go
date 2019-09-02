@@ -211,13 +211,8 @@ func (p *WSProvider) receivePump() {
 	for {
 		_, message, err := p.client.ReadMessage()
 		if err != nil {
-			p.deadMu.Lock()
-			dead := p.dead
-			p.deadMu.Unlock()
-			if !dead {
-				log.Warnf("message read error: %s", err)
-				p.fatality()
-			}
+			log.Debugf("message read error: %s", err)
+			p.fatality()
 			return
 		}
 		msg, err := jsonrpc2.DecodeResponse(message)
@@ -322,15 +317,17 @@ func (p *WSProvider) handleMessage(msg *jsonrpc2.JSONRPCMessage) {
 
 func (p *WSProvider) fatality() {
 	p.deadMu.Lock()
-	p.dead = true
-	p.deadMu.Unlock()
+	if !p.dead {
+		p.dead = true
 
-	// kill any ongoing requests
-	close(p.cancel)
-	// kill any subscriptions
-	for k := range p.subscriptions {
-		p.unsubscribe(k)
+		// kill any ongoing requests
+		close(p.cancel)
+		// kill any subscriptions
+		for k := range p.subscriptions {
+			p.unsubscribe(k)
+		}
 	}
+	p.deadMu.Unlock()
 
 	_ = p.client.Close()
 }
