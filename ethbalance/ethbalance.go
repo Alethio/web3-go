@@ -1,6 +1,7 @@
 package ethbalance
 
 import (
+	"fmt"
 	"math/big"
 
 	"github.com/alethio/web3-go/ethrpc"
@@ -85,7 +86,7 @@ func (b *Bookkeeper) scheduleQueries(accounts map[string][]string, queries chan 
 func (b *Bookkeeper) processQueries(block string, queries, results chan *balanceQuery, errors chan error, done chan bool) {
 	ctx := context.TODO()
 	sem := semaphore.NewWeighted(b.workers)
-	killSwitch := make(chan bool)
+	killSwitch := make(chan bool, 1)
 
 	for {
 		select {
@@ -119,6 +120,7 @@ func (b *Bookkeeper) processQueries(block string, queries, results chan *balance
 				query.value = balance
 
 				if err != nil {
+					fmt.Println(err)
 					killSwitch <- true
 					errors <- err
 				} else {

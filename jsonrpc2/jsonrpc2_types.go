@@ -32,6 +32,17 @@ type JSONRPCMessage struct {
 	Raw     json.RawMessage `json:"-"`
 }
 
+// DecodeError : error returned when failing to decode a response
+type DecodeError struct {
+	Raw []byte
+	Err error
+}
+
+// Error message string
+func (d DecodeError) Error() string {
+	return fmt.Sprintf("Error decoding %s: %s", d.Raw, d.Err)
+}
+
 func (msg *JSONRPCMessage) IsNotification() bool {
 	return msg.ID == "" && msg.Method != ""
 }
