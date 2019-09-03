@@ -4,11 +4,13 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/alethio/web3-go/ethbalance"
 	"github.com/alethio/web3-go/ethrpc"
+	"github.com/alethio/web3-go/ethrpc/provider/httprpc"
 )
 
 type worker struct {
@@ -18,7 +20,9 @@ type worker struct {
 func main() {
 
 	var ethURL string
+	var batched bool
 	flag.StringVar(&ethURL, "eth-client-url", "ws://localhost:8546", "Websockets URL of an Ethereum Client (parity needed)")
+	flag.BoolVar(&batched, "batched", false, "Control wether the client is in batch mode")
 	flag.Parse()
 
 	args := flag.Args()
@@ -30,7 +34,17 @@ func main() {
 		os.Exit(0)
 	}
 
-	e, err := ethrpc.NewWithDefaults(ethURL)
+	var e *ethrpc.ETH
+	var err error
+	if batched {
+		provider, err := httprpc.NewWithBatch(ethURL, 0, 4*time.Millisecond)
+		if err != nil {
+			log.Fatal(err)
+		}
+		e, err = ethrpc.New(provider)
+	} else {
+		e, err = ethrpc.NewWithDefaults(ethURL)
+	}
 	if err != nil {
 		log.Fatal(err)
 	}
