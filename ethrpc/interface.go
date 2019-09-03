@@ -41,5 +41,6 @@ type ETHInterface interface {
 	NewPendingTransactionsSubscription() (r chan *string, err error)
 	SetPendingTransactionsFilter() (id string, err error)
 	Start() error
+	Stop()
 	Subscribe(receiver chan *json.RawMessage, method string, event string, params ...interface{}) error
 }

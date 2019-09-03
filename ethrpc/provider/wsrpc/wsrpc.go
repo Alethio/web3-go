@@ -39,6 +39,7 @@ type WSProvider struct {
 	subscriptions map[string]chan *json.RawMessage
 	cancel        chan struct{}
 	dead          bool
+	deadMu        sync.Mutex
 }
 
 // Start connects to parity and starts listening for notifications
@@ -47,7 +48,9 @@ func (p *WSProvider) Start() error {
 	if err != nil {
 		return err
 	}
+	p.deadMu.Lock()
 	p.dead = false
+	p.deadMu.Unlock()
 	go p.receivePump()
 	go p.sendPump()
 	return nil
@@ -55,7 +58,7 @@ func (p *WSProvider) Start() error {
 
 // Stop closes the websocket connection
 func (p *WSProvider) Stop() {
-	p.client.Close()
+	p.fatality()
 }
 
 // CallRaw calls a RPC method and returns the raw result
@@ -145,7 +148,10 @@ func (p *WSProvider) unsubscribe(subscriptionID string) {
 }
 
 func (p *WSProvider) makeRequest(receiver chan *jsonrpc2.JSONRPCMessage, method string, params []interface{}) error {
-	if p.dead {
+	p.deadMu.Lock()
+	dead := p.dead
+	p.deadMu.Unlock()
+	if dead {
 		return etherr.ConnectionClosed
 	}
 
@@ -205,7 +211,7 @@ func (p *WSProvider) receivePump() {
 	for {
 		_, message, err := p.client.ReadMessage()
 		if err != nil {
-			log.Warnf("message read error: %s", err)
+			log.Debugf("message read error: %s", err)
 			p.fatality()
 			return
 		}
@@ -310,13 +316,20 @@ func (p *WSProvider) handleMessage(msg *jsonrpc2.JSONRPCMessage) {
 }
 
 func (p *WSProvider) fatality() {
-	p.dead = true
-	// kill any ongoing requests
-	close(p.cancel)
-	// kill any subscriptions
-	for k := range p.subscriptions {
-		p.unsubscribe(k)
+	p.deadMu.Lock()
+	if !p.dead {
+		p.dead = true
+
+		// kill any ongoing requests
+		close(p.cancel)
+		// kill any subscriptions
+		for k := range p.subscriptions {
+			p.unsubscribe(k)
+		}
 	}
+	p.deadMu.Unlock()
+
+	_ = p.client.Close()
 }
 
 // New creates a new WSProvider struct
