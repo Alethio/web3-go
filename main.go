@@ -44,7 +44,7 @@ func main() {
 			log.Fatal(err)
 		}
 		provider, err := httprpc.NewWithLoader(ethURL, batchLoader)
-		provider.SetHTTPTimeout(5000 * time.Millisecond)
+		provider.SetHTTPTimeout(2 * time.Millisecond)
 		if err != nil {
 			log.Fatal(err)
 		}

@@ -80,11 +80,11 @@ func (b *Bookkeeper) fetchRequests(requests []*BalanceRequest, results chan *Bal
 	wg := sync.WaitGroup{}
 
 	for {
-		failed := make(chan *BalanceRequest, len(requests))
+		failed := make(chan *RequestError, len(requests))
 		errors := make(chan error, len(requests))
 		for _, request := range requests {
 			wg.Add(1)
-			go func(req *BalanceRequest, results chan *BalanceResponse, failed chan *BalanceRequest) {
+			go func(req *BalanceRequest, results chan *BalanceResponse, failed chan *RequestError) {
 				defer wg.Done()
 				var balance string
 				var err error
@@ -99,7 +99,7 @@ func (b *Bookkeeper) fetchRequests(requests []*BalanceRequest, results chan *Bal
 				}
 
 				if err != nil {
-					failed <- req
+					failed <- &RequestError{req, err}
 				} else {
 					results <- &BalanceResponse{
 						Request: req,
@@ -114,8 +114,11 @@ func (b *Bookkeeper) fetchRequests(requests []*BalanceRequest, results chan *Bal
 		close(failed)
 
 		requests := make([]*BalanceRequest, 0, len(requests))
-		for req := range failed {
-			requests = append(requests, req)
+		reqErrors := make([]*RequestError, 0, len(requests))
+
+		for reqError := range failed {
+			reqErrors = append(reqErrors, reqError)
+			requests = append(requests, reqError.req)
 		}
 
 		if len(requests) == 0 {
@@ -123,12 +126,9 @@ func (b *Bookkeeper) fetchRequests(requests []*BalanceRequest, results chan *Bal
 			return
 		}
 
-		tries += 1
-
+		tries++
 		if tries >= b.retries {
-			// This will always only show a single error not great, not terrible
-			err := <-errors
-			done <- err
+			done <- CollectBalancesError{reqErrors}
 			return
 		}
 	}
