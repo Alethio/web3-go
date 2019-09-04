@@ -3,130 +3,178 @@ package ethbalance
 import (
 	"fmt"
 	"math/big"
+	"sync"
 
 	"github.com/alethio/web3-go/ethrpc"
-
-	"golang.org/x/net/context"
-	"golang.org/x/sync/semaphore"
+	"github.com/alethio/web3-go/strhelper"
 )
 
-// Bookkeeper provides highlevel access to ether and token balances.
-type Bookkeeper struct {
-	eth     ethrpc.ETHInterface
-	workers int64
-}
-
-type balanceQuery struct {
-	address      string
-	forToken     bool
-	tokenAddress string
-	value        *big.Int
-}
-
 // New returns a new Bookkeeper struct
-func New(eth ethrpc.ETHInterface, workers int) *Bookkeeper {
+func New(eth ethrpc.ETHInterface, retries uint) *Bookkeeper {
 	return &Bookkeeper{
 		eth:     eth,
-		workers: int64(workers),
+		retries: retries,
 	}
 }
 
-// GetBalancesAtBlock gets a list of accounts and associated tokens and returns all balances
-func (b *Bookkeeper) GetBalancesAtBlock(accounts map[string][]string, block string) (map[string]map[string]*big.Int, error) {
-	balances := make(map[string]map[string]*big.Int)
+// GetIntBalanceSheet takes a list of balance requests and returns a tree like
+// structure containing all int balances
+func (b *Bookkeeper) GetIntBalanceSheet(requests []*BalanceRequest) (IntBalanceSheet, error) {
+	balances := make(IntBalanceSheet)
+	intResponses, err := b.GetIntBalanceResults(requests)
+	if err != nil {
+		return balances, err
+	}
 
-	results := make(chan *balanceQuery)
-	queries := make(chan *balanceQuery)
-	errors := make(chan error)
-	done := make(chan bool, 1)
+	for _, result := range intResponses {
+		block := result.Request.Block
+		address := result.Request.Address
+		source := result.Request.Source
 
-	go b.scheduleQueries(accounts, queries)
-	go b.processQueries(block, queries, results, errors, done)
+		if balances[block] == nil {
+			balances[block] = make(map[Address]map[Source]*big.Int)
+		}
+
+		if balances[block][address] == nil {
+			balances[block][address] = make(map[Source]*big.Int)
+
+		}
+
+		balances[block][address][source] = result.Balance
+	}
+	return balances, nil
+}
+
+// GetRawBalanceSheet takes a list of balance requests and returns a tree like
+// structure containing all hex string balances
+func (b *Bookkeeper) GetRawBalanceSheet(requests []*BalanceRequest) (RawBalanceSheet, error) {
+	balances := make(RawBalanceSheet)
+	rawResponses, err := b.GetRawBalanceResults(requests)
+	if err != nil {
+		return balances, err
+	}
+
+	for _, result := range rawResponses {
+		block := result.Request.Block
+		address := result.Request.Address
+		source := result.Request.Source
+
+		if balances[block] == nil {
+			balances[block] = make(map[Address]map[Source]string)
+		}
+
+		if balances[block][address] == nil {
+			balances[block][address] = make(map[Source]string)
+
+		}
+
+		balances[block][address][source] = result.Balance
+	}
+	return balances, nil
+}
+
+// GetIntBalanceResults returns an array of *big.Int balance results for the provided requests
+func (b *Bookkeeper) GetIntBalanceResults(requests []*BalanceRequest) ([]*IntBalanceResponse, error) {
+	intResponses := make([]*IntBalanceResponse, 0, len(requests))
+	failedRequests := make([]*RequestError, 0, len(requests))
+
+	rawResponses, err := b.GetRawBalanceResults(requests)
+	if err != nil {
+		return nil, err
+	}
+	for _, rawResponse := range rawResponses {
+		intBalance, err := strhelper.HexStrToBigInt(rawResponse.Balance)
+		if err != nil {
+			failedRequests = append(failedRequests, &RequestError{rawResponse.Request, err})
+		} else {
+			intResponses = append(intResponses, &IntBalanceResponse{
+				Request: rawResponse.Request,
+				Balance: intBalance,
+			})
+		}
+	}
+
+	if len(failedRequests) > 0 {
+		return intResponses, DecodeBalancesError{failedRequests}
+	}
+	return intResponses, nil
+}
+
+// GetRawBalanceResults returns an array of hex string balance results for the provided requests
+func (b *Bookkeeper) GetRawBalanceResults(requests []*BalanceRequest) ([]*RawBalanceResponse, error) {
+	results := make(chan *RawBalanceResponse)
+	responses := make([]*RawBalanceResponse, 0, len(requests))
+
+	done := make(chan error, 1)
+
+	go b.fetchRequests(requests, results, done)
 
 	for {
 		select {
 		case result := <-results:
-			if balances[result.address] == nil {
-				balances[result.address] = make(map[string]*big.Int)
-			}
-			if result.forToken == true {
-				balances[result.address][result.tokenAddress] = result.value
-			} else {
-				balances[result.address]["eth"] = result.value
-			}
-		case err := <-errors:
-			return nil, err
-		case <-done:
-			return balances, nil
+			responses = append(responses, result)
+		case err := <-done:
+			return responses, err
 		}
 	}
+
 }
 
-func (b *Bookkeeper) scheduleQueries(accounts map[string][]string, queries chan *balanceQuery) {
-	for account, tokens := range accounts {
-		queries <- &balanceQuery{
-			address:      account,
-			forToken:     false,
-			tokenAddress: "",
-			value:        nil,
-		}
-
-		for _, token := range tokens {
-			queries <- &balanceQuery{
-				address:      account,
-				forToken:     true,
-				tokenAddress: token,
-				value:        nil,
-			}
-		}
-	}
-	close(queries)
-}
-
-func (b *Bookkeeper) processQueries(block string, queries, results chan *balanceQuery, errors chan error, done chan bool) {
-	ctx := context.TODO()
-	sem := semaphore.NewWeighted(b.workers)
-	killSwitch := make(chan bool, 1)
+func (b *Bookkeeper) fetchRequests(requests []*BalanceRequest, results chan *RawBalanceResponse, done chan error) {
+	var tries uint = 0
+	wg := sync.WaitGroup{}
 
 	for {
-		select {
-		case <-killSwitch:
-			return
-		case query, ok := <-queries:
-			if ok == false {
-				if err := sem.Acquire(ctx, b.workers); err != nil {
-					errors <- err
-				} else {
-					done <- true
-				}
-				return
-			}
-
-			if err := sem.Acquire(ctx, 1); err != nil {
-				errors <- err
-				killSwitch <- true
-				return
-			}
-			go func(query *balanceQuery) {
-				defer sem.Release(1)
-				var balance *big.Int
+		failed := make(chan *RequestError, len(requests))
+		errors := make(chan error, len(requests))
+		for _, request := range requests {
+			wg.Add(1)
+			go func(req *BalanceRequest, results chan *RawBalanceResponse, failed chan *RequestError) {
+				defer wg.Done()
+				var balance string
 				var err error
 
-				if query.forToken == true {
-					balance, err = b.eth.GetTokenBalanceAtBlock(query.address, query.tokenAddress, block)
+				block := fmt.Sprintf("0x%x", req.Block)
+				address := string(req.Address)
+				if req.Source == ETH {
+					balance, err = b.eth.GetRawBalanceAtBlock(address, block)
 				} else {
-					balance, err = b.eth.GetBalanceAtBlock(query.address, block)
+					token := string(req.Source)
+					balance, err = b.eth.GetRawTokenBalanceAtBlock(address, token, block)
 				}
-				query.value = balance
 
 				if err != nil {
-					fmt.Println(err)
-					killSwitch <- true
-					errors <- err
+					failed <- &RequestError{req, err}
 				} else {
-					results <- query
+					results <- &RawBalanceResponse{
+						Request: req,
+						Balance: balance,
+					}
+					errors <- err
 				}
-			}(query)
+			}(request, results, failed)
+		}
+
+		wg.Wait()
+		close(failed)
+
+		requests = make([]*BalanceRequest, 0, len(requests))
+		reqErrors := make([]*RequestError, 0, len(requests))
+
+		for reqError := range failed {
+			reqErrors = append(reqErrors, reqError)
+			requests = append(requests, reqError.Request)
+		}
+
+		if len(requests) == 0 {
+			done <- nil
+			return
+		}
+
+		tries++
+		if tries >= b.retries {
+			done <- CollectBalancesError{reqErrors}
+			return
 		}
 	}
 }

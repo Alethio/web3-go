@@ -2,35 +2,38 @@ package ethbalance
 
 import (
 	"fmt"
-	"math/big"
 	"testing"
 
 	"github.com/alethio/web3-go/ethrpc"
+	"github.com/alethio/web3-go/strhelper"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/go-test/deep"
 )
 
 type MockETH struct {
 	ethrpc.ETH
-	balances   map[string]map[string]map[string]*big.Int
+	balances   RawBalanceSheet
 	throwError bool
 }
 
-func (m *MockETH) GetBalanceAtBlock(address, block string) (*big.Int, error) {
+func (m *MockETH) GetRawBalanceAtBlock(address, block string) (string, error) {
 	if m.throwError == true {
-		return nil, fmt.Errorf("Fatal error")
+		return "", fmt.Errorf("Fatal error")
 	}
-	return m.balances[block][address]["eth"], nil
+	blockNumber, _ := strhelper.HexStrToInt64(block)
+	return m.balances[BlockNumber(blockNumber)][address][ETH], nil
 }
 
-func (m *MockETH) GetTokenBalanceAtBlock(address, token, block string) (*big.Int, error) {
+func (m *MockETH) GetRawTokenBalanceAtBlock(address, token, block string) (string, error) {
 	if m.throwError == true {
-		return nil, fmt.Errorf("Fatal error")
+		return "", fmt.Errorf("Fatal error")
 	}
-	return m.balances[block][address][token], nil
+	blockNumber, _ := strhelper.HexStrToInt64(block)
+	return m.balances[BlockNumber(blockNumber)][address][Source(token)], nil
 }
 
-func ExampleBookkeeper_GetBalancesAtBlock() {
+func ExampleBookkeeper_GetIntBalanceResults() {
 	r, err := ethrpc.NewWithDefaults("wss://mainnet.infura.io/ws")
 	if err != nil {
 		fmt.Println(err)
@@ -38,24 +41,15 @@ func ExampleBookkeeper_GetBalancesAtBlock() {
 	}
 
 	b := New(r, 10)
-	accounts := map[string][]string{
-		"0xa838e871a02c6d883bf004352fc7dac8f781fed6": []string{
-			"0xBEB9eF514a379B997e0798FDcC901Ee474B6D9A1",
-			"0x0f5d2fb29fb7d3cfee444a200298f468908cc942",
-			"0xd26114cd6EE289AccF82350c8d8487fedB8A0C07",
-			"0x8aa33a7899fcc8ea5fbe6a608a109c3893a1b8b2",
-		},
-	}
-	balances, err := b.GetBalancesAtBlock(accounts, "0x62d313")
+	results, err := b.GetIntBalanceResults(balanceRequests())
 
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	for account, accountBalances := range balances {
-		for source, value := range accountBalances {
-			fmt.Printf("%s[%s]: %v\n", account, source, value)
-		}
+
+	for _, res := range results {
+		fmt.Printf("%s[%s]: %s\n", res.Request.Address, res.Request.Source, res.Balance)
 	}
 	// Example output:
 	// 0xa838e871a02c6d883bf004352fc7dac8f781fed6[0xd26114cd6EE289AccF82350c8d8487fedB8A0C07]: 409757565152676909
@@ -67,71 +61,110 @@ func ExampleBookkeeper_GetBalancesAtBlock() {
 
 func TestGetBalancesWithOneAddressAndNoTokens(t *testing.T) {
 	mockEth := &MockETH{}
-	mockEth.balances = make(map[string]map[string]map[string]*big.Int)
-	mockEth.balances["latest"] = make(map[string]map[string]*big.Int)
-	mockEth.balances["latest"]["0x9fc201b6bc40cccbd5b588532ce98b845f95af51"] = make(map[string]*big.Int)
-	mockEth.balances["latest"]["0x9fc201b6bc40cccbd5b588532ce98b845f95af51"]["eth"] = big.NewInt(100)
+	block := BlockNumber(7500000)
+	mockEth.balances = RawBalanceSheet{
+		block: map[Address]map[Source]string{
+			"0x9fc201b6bc40cccbd5b588532ce98b845f95af51": map[Source]string{
+				ETH: fmt.Sprintf("0x%x", 100),
+			},
+		},
+	}
 
 	bookkeeper := New(mockEth, 10)
-	query := make(map[string][]string)
-	query["0x9fc201b6bc40cccbd5b588532ce98b845f95af51"] = make([]string, 0)
+	requests := []*BalanceRequest{
+		&BalanceRequest{
+			Address: "0x9fc201b6bc40cccbd5b588532ce98b845f95af51",
+			Source:  ETH,
+			Block:   block,
+		},
+	}
 
-	balances, err := bookkeeper.GetBalancesAtBlock(query, "latest")
+	balances, err := bookkeeper.GetRawBalanceSheet(requests)
 	if err != nil {
 		t.Errorf("Unexpected error %s", err)
 	}
 
-	if diff := deep.Equal(balances, mockEth.balances["latest"]); diff != nil {
+	spew.Dump(mockEth.balances)
+	spew.Dump(balances)
+	if diff := deep.Equal(balances, mockEth.balances); diff != nil {
 		t.Error(diff)
 	}
 }
 
 func TestGetBalancesWithOneAddressAndTokens(t *testing.T) {
 	mockEth := &MockETH{}
-	mockEth.balances = make(map[string]map[string]map[string]*big.Int)
-	mockEth.balances["latest"] = make(map[string]map[string]*big.Int)
-	mockEth.balances["latest"]["0x9fc201b6bc40cccbd5b588532ce98b845f95af51"] = make(map[string]*big.Int)
-	mockEth.balances["latest"]["0x9fc201b6bc40cccbd5b588532ce98b845f95af51"]["eth"] = big.NewInt(100)
-	mockEth.balances["latest"]["0x9fc201b6bc40cccbd5b588532ce98b845f95af51"]["0xabc"] = big.NewInt(102)
+	block := BlockNumber(7500000)
+	mockEth.balances = make(RawBalanceSheet)
+	mockEth.balances = RawBalanceSheet{
+		block: map[Address]map[Source]string{
+			"0x9fc201b6bc40cccbd5b588532ce98b845f95af51": map[Source]string{
+				ETH:     fmt.Sprintf("0x%x", 100),
+				"0xabc": fmt.Sprintf("0x%x", 102),
+			},
+		},
+	}
 
 	bookkeeper := New(mockEth, 10)
-	query := make(map[string][]string)
-	query["0x9fc201b6bc40cccbd5b588532ce98b845f95af51"] = []string{"0xabc"}
+	requests := []*BalanceRequest{
+		&BalanceRequest{
+			Address: "0x9fc201b6bc40cccbd5b588532ce98b845f95af51",
+			Source:  ETH,
+			Block:   block,
+		},
+		&BalanceRequest{
+			Address: "0x9fc201b6bc40cccbd5b588532ce98b845f95af51",
+			Source:  "0xabc",
+			Block:   block,
+		},
+	}
 
-	balances, err := bookkeeper.GetBalancesAtBlock(query, "latest")
+	balances, err := bookkeeper.GetRawBalanceSheet(requests)
 	if err != nil {
 		t.Errorf("Unexpected error %s", err)
 	}
 
-	if diff := deep.Equal(balances, mockEth.balances["latest"]); diff != nil {
+	if diff := deep.Equal(balances, mockEth.balances); diff != nil {
 		t.Error(diff)
 	}
 }
 
 func TestGetBalancesWithMultipleAddressesAndTokens(t *testing.T) {
 	mockEth := &MockETH{}
-	mockEth.balances = make(map[string]map[string]map[string]*big.Int)
-	mockEth.balances["latest"] = make(map[string]map[string]*big.Int)
-	mockEth.balances["latest"]["0x9fc201b6bc40cccbd5b588532ce98b845f95af51"] = make(map[string]*big.Int)
-	mockEth.balances["latest"]["0x9fc201b6bc40cccbd5b588532ce98b845f95af51"]["eth"] = big.NewInt(100)
-	mockEth.balances["latest"]["0x9fc201b6bc40cccbd5b588532ce98b845f95af51"]["0xabc"] = big.NewInt(102)
-	mockEth.balances["latest"]["0x9fc201b6bc40cccbd5b588532ce98b845f95af51"]["0xabd"] = big.NewInt(105)
-	mockEth.balances["latest"]["0x9fc201b6bc40cccbd5b588532ce98b845f95af52"] = make(map[string]*big.Int)
-	mockEth.balances["latest"]["0x9fc201b6bc40cccbd5b588532ce98b845f95af52"]["eth"] = big.NewInt(101)
-	mockEth.balances["latest"]["0x9fc201b6bc40cccbd5b588532ce98b845f95af52"]["0xabc"] = big.NewInt(103)
-	mockEth.balances["latest"]["0x9fc201b6bc40cccbd5b588532ce98b845f95af52"]["0xabf"] = big.NewInt(104)
+	block := BlockNumber(7500000)
+	mockEth.balances = make(RawBalanceSheet)
+	mockEth.balances = RawBalanceSheet{
+		block: map[Address]map[Source]string{
+			"0x9fc201b6bc40cccbd5b588532ce98b845f95af51": map[Source]string{
+				ETH:     fmt.Sprintf("0x%x", 100),
+				"0xabc": fmt.Sprintf("0x%x", 102),
+				"0xabd": fmt.Sprintf("0x%x", 105),
+			},
+			"0x9fc201b6bc40cccbd5b588532ce98b845f95af52": map[Source]string{
+				ETH:     fmt.Sprintf("0x%x", 101),
+				"0xabc": fmt.Sprintf("0x%x", 103),
+				"0xabd": fmt.Sprintf("0x%x", 104),
+			},
+		},
+	}
 
 	bookkeeper := New(mockEth, 10)
-	query := make(map[string][]string)
-	query["0x9fc201b6bc40cccbd5b588532ce98b845f95af51"] = []string{"0xabc", "0xabd"}
-	query["0x9fc201b6bc40cccbd5b588532ce98b845f95af52"] = []string{"0xabc", "0xabf"}
+	requests := make([]*BalanceRequest, 0, 0)
+	for _, address := range []Address{"0x9fc201b6bc40cccbd5b588532ce98b845f95af51", "0x9fc201b6bc40cccbd5b588532ce98b845f95af52"} {
+		for _, source := range []Source{ETH, "0xabc", "0xabd"} {
+			requests = append(requests, &BalanceRequest{
+				Address: address,
+				Source:  source,
+				Block:   block,
+			})
+		}
+	}
 
-	balances, err := bookkeeper.GetBalancesAtBlock(query, "latest")
+	balances, err := bookkeeper.GetRawBalanceSheet(requests)
 	if err != nil {
 		t.Errorf("Unexpected error %s", err)
 	}
 
-	if diff := deep.Equal(balances, mockEth.balances["latest"]); diff != nil {
+	if diff := deep.Equal(balances, mockEth.balances); diff != nil {
 		t.Error(diff)
 	}
 }
@@ -139,16 +172,54 @@ func TestGetBalancesWithMultipleAddressesAndTokens(t *testing.T) {
 func TestGetBalancesWithError(t *testing.T) {
 	mockEth := &MockETH{throwError: true}
 	bookkeeper := New(mockEth, 10)
-	query := make(map[string][]string)
-	query["0x9fc201b6bc40cccbd5b588532ce98b845f95af51"] = []string{"0xabc", "0xabd"}
-	query["0x9fc201b6bc40cccbd5b588532ce98b845f95af52"] = []string{"0xabc", "0xabf"}
-	query["0x9fc201b6bc40cccbd5b588532ce98b845f95af53"] = []string{"0xabc", "0xabf"}
-	query["0x9fc201b6bc40cccbd5b588532ce98b845f95af54"] = []string{"0xabc", "0xabf"}
-	query["0x9fc201b6bc40cccbd5b588532ce98b845f95af55"] = []string{"0xabc", "0xabf"}
-	query["0x9fc201b6bc40cccbd5b588532ce98b845f95af52"] = []string{"0xabc", "0xabf"}
+	block := BlockNumber(7500000)
+	requests := []*BalanceRequest{
+		&BalanceRequest{
+			Address: "0x9fc201b6bc40cccbd5b588532ce98b845f95af51",
+			Source:  ETH,
+			Block:   block,
+		},
+		&BalanceRequest{
+			Address: "0x9fc201b6bc40cccbd5b588532ce98b845f95af51",
+			Source:  "0xabc",
+			Block:   block,
+		},
+	}
 
-	_, err := bookkeeper.GetBalancesAtBlock(query, "latest")
+	_, err := bookkeeper.GetRawBalanceResults(requests)
 	if err == nil {
 		t.Fatal("Expecting error")
+	}
+}
+
+func balanceRequests() []*BalanceRequest {
+	address := Address("0xa838e871a02c6d883bf004352fc7dac8f781fed6")
+	block := BlockNumber(7500000)
+	return []*BalanceRequest{
+		&BalanceRequest{
+			Address: address,
+			Block:   block,
+			Source:  ETH,
+		},
+		&BalanceRequest{
+			Address: address,
+			Block:   block,
+			Source:  Source("0xBEB9eF514a379B997e0798FDcC901Ee474B6D9A1"),
+		},
+		&BalanceRequest{
+			Address: address,
+			Block:   block,
+			Source:  Source("0x0f5d2fb29fb7d3cfee444a200298f468908cc942"),
+		},
+		&BalanceRequest{
+			Address: address,
+			Block:   block,
+			Source:  Source("0xd26114cd6EE289AccF82350c8d8487fedB8A0C07"),
+		},
+		&BalanceRequest{
+			Address: address,
+			Block:   block,
+			Source:  Source("0x8aa33a7899fcc8ea5fbe6a608a109c3893a1b8b2"),
+		},
 	}
 }

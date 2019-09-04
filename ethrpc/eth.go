@@ -169,18 +169,30 @@ func (e *ETH) GetTransactionReceipt(hash string) (r types.Receipt, err error) {
 	return
 }
 
-// GetBalanceAtBlock returns the balance of an address at a given blockNumber
-func (e *ETH) GetBalanceAtBlock(address, blockNumber string) (*big.Int, error) {
+// GetRawBalanceAtBlock returns the balance of an address at a given blockNumber as a hex string
+func (e *ETH) GetRawBalanceAtBlock(address, blockNumber string) (string, error) {
 	var result string
 	err := e.MakeRequest(&result, ETHGetBalance, address, blockNumber)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return strhelper.HexStrToBigInt(result)
+	if result == "0x" || result == "" {
+		return "", etherr.Empty
+	}
+	return result, nil
 }
 
-// GetTokenBalanceAtBlock returns the token balance of an address at a given blockNumber
-func (e *ETH) GetTokenBalanceAtBlock(address, token, blockNumber string) (*big.Int, error) {
+// GetBalanceAtBlock returns the balance of an address at a given blockNumber as a big.Int
+func (e *ETH) GetBalanceAtBlock(address, blockNumber string) (*big.Int, error) {
+	rawBalance, err := e.GetRawBalanceAtBlock(address, blockNumber)
+	if err != nil {
+		return nil, err
+	}
+	return strhelper.HexStrToBigInt(rawBalance)
+}
+
+// GetRawTokenBalanceAtBlock returns the token balance of an address at a given blockNumber as a hex string
+func (e *ETH) GetRawTokenBalanceAtBlock(address, token, blockNumber string) (string, error) {
 	var result string
 	payload := make(map[string]string)
 	payload["to"] = token
@@ -189,13 +201,22 @@ func (e *ETH) GetTokenBalanceAtBlock(address, token, blockNumber string) (*big.I
 			strings.Repeat("0", 32-len(BalanceOfFunction)+2) +
 			strings.Replace(address, "0x", "", 1)
 	err := e.MakeRequest(&result, ETHCall, payload, blockNumber)
-	if result == "0x" {
-		return nil, etherr.Empty
+	if err != nil {
+		return "", err
 	}
+	if result == "0x" || result == "" {
+		return "", etherr.Empty
+	}
+	return result, nil
+}
+
+// GetTokenBalanceAtBlock returns the token balance of an address at a given blockNumber as a big.Int
+func (e *ETH) GetTokenBalanceAtBlock(address, token, blockNumber string) (*big.Int, error) {
+	rawBalance, err := e.GetRawTokenBalanceAtBlock(address, token, blockNumber)
 	if err != nil {
 		return nil, err
 	}
-	return strhelper.HexStrToBigInt(result)
+	return strhelper.HexStrToBigInt(rawBalance)
 }
 
 // GetBlockNumber returns the number of most recent block.
