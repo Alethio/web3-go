@@ -38,7 +38,7 @@ type DecodeError struct {
 	Err error
 }
 
-// Error messaga
+// Error message string
 func (d DecodeError) Error() string {
 	return fmt.Sprintf("Error decoding %s: %s", d.Raw, d.Err)
 }
