@@ -4,17 +4,17 @@ import "fmt"
 
 // RequestError wraps a request with the error received
 type RequestError struct {
-	req *BalanceRequest
-	err error
+	Request *BalanceRequest
+	Err     error
 }
 
 func (re RequestError) section() string {
-	return fmt.Sprintf("    %d %s %s", re.req.Block, re.req.Address, re.req.Source)
+	return fmt.Sprintf("    %d %s %s", re.Request.Block, re.Request.Address, re.Request.Source)
 }
 
 // CollectBalancesError wraps errors returned from the RPC requests
 type CollectBalancesError struct {
-	errors []*RequestError
+	Errors []*RequestError
 }
 
 // Error message aggregates all unique errors
@@ -23,8 +23,8 @@ func (cbe CollectBalancesError) Error() string {
 	errorMessages := make(map[string]string)
 	index := 0
 
-	for _, reqError := range cbe.errors {
-		errorMessageKey := reqError.err.Error()
+	for _, reqError := range cbe.Errors {
+		errorMessageKey := reqError.Err.Error()
 		sectionError, ok := errorMessages[errorMessageKey]
 		if !ok {
 			sectionError = fmt.Sprintf("[%d] %s on:\n", index, errorMessageKey)

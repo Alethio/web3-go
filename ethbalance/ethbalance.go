@@ -118,7 +118,7 @@ func (b *Bookkeeper) fetchRequests(requests []*BalanceRequest, results chan *Bal
 
 		for reqError := range failed {
 			reqErrors = append(reqErrors, reqError)
-			requests = append(requests, reqError.req)
+			requests = append(requests, reqError.Request)
 		}
 
 		if len(requests) == 0 {
