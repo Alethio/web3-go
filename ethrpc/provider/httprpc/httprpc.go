@@ -1,13 +1,9 @@
 package httprpc
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"math/rand"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/alethio/web3-go/etherr"
@@ -23,9 +19,12 @@ const (
 type HTTPProvider struct {
 	client      *http.Client
 	url         string
-	batch       bool
-	loader      *rpcLoader
+	loader      RPCLoader
 	httpTimeout time.Duration
+}
+
+type RPCLoader interface {
+	Load(*jsonrpc2.JSONRPCRequest) ([]byte, error)
 }
 
 // Start does nothing on the http provider
@@ -41,14 +40,21 @@ func (p *HTTPProvider) Stop() {
 
 // CallRaw calls a RPC method and returns the raw result
 func (p *HTTPProvider) CallRaw(method string, params ...interface{}) ([]byte, error) {
-	return p.fetchRequestRaw(method, params)
+	req := jsonrpc2.BuildRequest(method, params)
+	return p.loader.Load(req)
 }
 
 // Call calls a RPC method and returns coresponding object
 func (p *HTTPProvider) Call(result interface{}, method string, params ...interface{}) error {
-	resp, err := p.makeRequest(method, params)
+	req := jsonrpc2.BuildRequest(method, params)
+	raw, err := p.loader.Load(req)
 	if err != nil {
 		return fmt.Errorf("call: %s", err)
+	}
+
+	resp, err := jsonrpc2.DecodeResponse(raw)
+	if err != nil {
+		return fmt.Errorf("decode rpc message: %s", err)
 	}
 
 	null := string(json.RawMessage([]byte("null")))
@@ -88,9 +94,12 @@ func New(url string) (*HTTPProvider, error) {
 	p := &HTTPProvider{
 		url:         url,
 		client:      httpClient,
-		batch:       false,
 		httpTimeout: DefaultHTTPTimeout,
 	}
+
+	p.loader = newSyncLoader(syncLoaderConfig{
+		Fetch: p.fetchSingle,
+	})
 
 	return p, nil
 }
@@ -110,14 +119,13 @@ func NewWithBatch(url string, batchMaxSize int, batchWait time.Duration) (*HTTPP
 	p := &HTTPProvider{
 		url:         url,
 		client:      httpClient,
-		batch:       true,
 		httpTimeout: DefaultHTTPTimeout,
 	}
 
-	p.loader = newRPCLoader(rpcLoaderConfig{
+	p.loader = newBatchLoader(batchLoaderConfig{
 		Wait:     batchWait,
 		MaxBatch: batchMaxSize,
-		Fetch:    p.fetchRequests,
+		Fetch:    p.fetchMultiple,
 	})
 
 	return p, nil
@@ -126,92 +134,4 @@ func NewWithBatch(url string, batchMaxSize int, batchWait time.Duration) (*HTTPP
 // SetHTTPTimeout allows setting the http timeout from outside
 func (p *HTTPProvider) SetHTTPTimeout(httpTimeout time.Duration) {
 	p.httpTimeout = httpTimeout
-}
-
-func (p *HTTPProvider) makeRequest(method string, params []interface{}) (*jsonrpc2.JSONRPCMessage, error) {
-	id := strconv.FormatInt(rand.Int63(), 16)
-	req := jsonrpc2.NewJSONRPCRequest(method, params, id)
-
-	if p.batch == true {
-		return p.makeRequestAsync(req)
-	} else {
-		return p.makeRequestSync(req)
-	}
-}
-
-func (p *HTTPProvider) makeRequestAsync(req *jsonrpc2.JSONRPCRequest) (*jsonrpc2.JSONRPCMessage, error) {
-	return p.loader.Load(req)
-}
-
-func (p *HTTPProvider) makeRequestSync(req *jsonrpc2.JSONRPCRequest) (*jsonrpc2.JSONRPCMessage, error) {
-	resp, err := p.fetchRequests([]*jsonrpc2.JSONRPCRequest{req})
-	return resp[0], err[0]
-}
-
-func (p *HTTPProvider) fetchRequestRaw(method string, params []interface{}) ([]byte, error) {
-	id := strconv.FormatInt(rand.Int63(), 16)
-	payload, err := jsonrpc2.EncodeClientRequest(method, params, id)
-	if err != nil {
-		return nil, err
-	}
-
-	httpRequest, err := http.NewRequest("POST", p.url, bytes.NewReader(payload))
-	if err != nil {
-		return nil, err
-	}
-	defer httpRequest.Body.Close()
-
-	httpRequest.Header.Add("Content-Type", "application/json")
-
-	response, err := p.client.Do(httpRequest)
-	if err != nil {
-		return nil, err
-	}
-
-	responseBody, err := ioutil.ReadAll(response.Body)
-	response.Body.Close()
-	if err != nil {
-		return nil, err
-	}
-
-	return responseBody, nil
-}
-
-func (p *HTTPProvider) fetchRequests(requests []*jsonrpc2.JSONRPCRequest) ([]*jsonrpc2.JSONRPCMessage, []error) {
-	fmt.Println("Making http rpc request for:")
-	fmt.Println(requests)
-
-	payload, err := jsonrpc2.EncodeClientRequests(requests)
-	if err != nil {
-		return nil, []error{err}
-	}
-
-	httpRequest, err := http.NewRequest("POST", p.url, bytes.NewReader(payload))
-	if err != nil {
-		return nil, []error{err}
-	}
-	defer httpRequest.Body.Close()
-
-	httpRequest.Header.Add("Content-Type", "application/json")
-
-	response, err := p.client.Do(httpRequest)
-	if err != nil {
-		return nil, []error{err}
-	}
-
-	responseBody, err := ioutil.ReadAll(response.Body)
-	response.Body.Close()
-	if err != nil {
-		return nil, []error{err}
-	}
-
-	msgs, err := jsonrpc2.DecodeResponses(responseBody)
-	if err != nil {
-		return msgs, []error{fmt.Errorf("decode rpc message: %s", err)}
-	}
-
-	fmt.Println("Got back: ")
-	fmt.Println(msgs)
-	// TODO: ensure that the order of the msgs is the same as the requests in the payload
-	return msgs, []error{nil}
 }

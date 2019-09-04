@@ -33,6 +33,7 @@ func main() {
 		log.Println("  newBlockNumberSubscription")
 		os.Exit(0)
 	}
+	log.SetLevel(log.DebugLevel)
 
 	var e *ethrpc.ETH
 	var err error
