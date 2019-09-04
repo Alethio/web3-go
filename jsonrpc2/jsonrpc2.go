@@ -43,7 +43,7 @@ func DecodeResponse(response []byte) (*JSONRPCMessage, error) {
 	var message JSONRPCMessage
 	message.Raw = response
 	if err := json.Unmarshal(response, &message); err != nil {
-		return nil, err
+		return nil, DecodeError{response, err}
 	}
 	return &message, nil
 }
@@ -52,7 +52,7 @@ func DecodeResponse(response []byte) (*JSONRPCMessage, error) {
 func DecodeResponses(response []byte) ([]json.RawMessage, error) {
 	var messages []json.RawMessage
 	if err := json.Unmarshal(response, &messages); err != nil {
-		return nil, err
+		return nil, DecodeError{response, err}
 	}
 	return messages, nil
 }

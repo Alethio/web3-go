@@ -2,35 +2,36 @@
 package httprpc
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/alethio/web3-go/jsonrpc2"
 )
 
-// batchLoaderConfig captures the config to create a new batchLoader
-type batchLoaderConfig struct {
-	// Fetch is a method that provides the data for the loader
-	Fetch func(req []*jsonrpc2.JSONRPCRequest) ([][]byte, []error)
-
-	// Wait is how long wait before sending a batch
-	Wait time.Duration
-
-	// MaxBatch will limit the maximum number of keys to send in one batch, 0 = not limit
-	MaxBatch int
-}
-
-// newBatchLoader creates a new batchLoader given a fetch, wait, and maxBatch
-func newBatchLoader(config batchLoaderConfig) *batchLoader {
-	return &batchLoader{
-		fetch:    config.Fetch,
-		wait:     config.Wait,
-		maxBatch: config.MaxBatch,
+// NewBatchLoader creates a new batchLoader given a fetch, wait, and maxBatch
+func NewBatchLoader(maxBatch int, wait time.Duration) (*BatchLoader, error) {
+	if maxBatch < 0 {
+		return nil, fmt.Errorf("Maximum batch size can not be negative")
 	}
+	if wait < 1*time.Millisecond {
+		return nil, fmt.Errorf("Minimum wait time must be at least 1 Millisecond")
+
+	}
+
+	return &BatchLoader{
+		wait:     wait,
+		maxBatch: maxBatch,
+	}, nil
 }
 
-// batchLoader batches and caches requests
-type batchLoader struct {
+// Init initializes the BatchLoader
+func (l *BatchLoader) Init(p *HTTPProvider) {
+	l.fetch = p.fetchMultiple
+}
+
+// BatchLoader loads RPC request as batches
+type BatchLoader struct {
 	// this method provides the data for the loader
 	fetch func(keys []*jsonrpc2.JSONRPCRequest) ([][]byte, []error)
 
@@ -59,14 +60,14 @@ type batchLoaderBatch struct {
 }
 
 // Load a request, batching will be applied automatically
-func (l *batchLoader) Load(req *jsonrpc2.JSONRPCRequest) ([]byte, error) {
+func (l *BatchLoader) Load(req *jsonrpc2.JSONRPCRequest) ([]byte, error) {
 	return l.LoadThunk(req)()
 }
 
 // LoadThunk returns a function that when called will block waiting for a byte.
 // This method should be used if you want one goroutine to make requests to many
 // different data loaders without blocking until the thunk is called.
-func (l *batchLoader) LoadThunk(req *jsonrpc2.JSONRPCRequest) func() ([]byte, error) {
+func (l *BatchLoader) LoadThunk(req *jsonrpc2.JSONRPCRequest) func() ([]byte, error) {
 	l.mu.Lock()
 	if l.batch == nil {
 		l.batch = &batchLoaderBatch{done: make(chan struct{})}
@@ -97,7 +98,7 @@ func (l *batchLoader) LoadThunk(req *jsonrpc2.JSONRPCRequest) func() ([]byte, er
 
 // LoadAll fetches many keys at once. It will be broken into appropriate sized
 // sub batches depending on how the loader is configured
-func (l *batchLoader) LoadAll(reqs []*jsonrpc2.JSONRPCRequest) ([][]byte, []error) {
+func (l *BatchLoader) LoadAll(reqs []*jsonrpc2.JSONRPCRequest) ([][]byte, []error) {
 	results := make([]func() ([]byte, error), len(reqs))
 
 	for i, req := range reqs {
@@ -115,7 +116,7 @@ func (l *batchLoader) LoadAll(reqs []*jsonrpc2.JSONRPCRequest) ([][]byte, []erro
 // LoadAllThunk returns a function that when called will block waiting for a bytes.
 // This method should be used if you want one goroutine to make requests to many
 // different data loaders without blocking until the thunk is called.
-func (l *batchLoader) LoadAllThunk(keys []*jsonrpc2.JSONRPCRequest) func() ([][]byte, []error) {
+func (l *BatchLoader) LoadAllThunk(keys []*jsonrpc2.JSONRPCRequest) func() ([][]byte, []error) {
 	results := make([]func() ([]byte, error), len(keys))
 	for i, key := range keys {
 		results[i] = l.LoadThunk(key)
@@ -132,7 +133,7 @@ func (l *batchLoader) LoadAllThunk(keys []*jsonrpc2.JSONRPCRequest) func() ([][]
 
 // keyIndex will return the location of the key in the batch, if its not found
 // it will add the key to the batch
-func (b *batchLoaderBatch) reqIndex(l *batchLoader, req *jsonrpc2.JSONRPCRequest) int {
+func (b *batchLoaderBatch) reqIndex(l *BatchLoader, req *jsonrpc2.JSONRPCRequest) int {
 	for i, existingRequest := range b.requests {
 		if req == existingRequest {
 			return i
@@ -156,7 +157,7 @@ func (b *batchLoaderBatch) reqIndex(l *batchLoader, req *jsonrpc2.JSONRPCRequest
 	return pos
 }
 
-func (b *batchLoaderBatch) startTimer(l *batchLoader) {
+func (b *batchLoaderBatch) startTimer(l *BatchLoader) {
 	time.Sleep(l.wait)
 	l.mu.Lock()
 
@@ -172,7 +173,7 @@ func (b *batchLoaderBatch) startTimer(l *batchLoader) {
 	b.end(l)
 }
 
-func (b *batchLoaderBatch) end(l *batchLoader) {
+func (b *batchLoaderBatch) end(l *BatchLoader) {
 	b.data, b.error = l.fetch(b.requests)
 	close(b.done)
 }

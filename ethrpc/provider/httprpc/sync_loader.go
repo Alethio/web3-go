@@ -2,25 +2,23 @@ package httprpc
 
 import "github.com/alethio/web3-go/jsonrpc2"
 
-// syncLoaderConfig captures the config to create a new syncLoader
-type syncLoaderConfig struct {
-	// Fetch is a method that provides the data for the loader
-	Fetch func(req *jsonrpc2.JSONRPCRequest) ([]byte, error)
-}
-
-type syncLoader struct {
+// SyncLoader is a synchronous loader that makes one http request per RPC
+type SyncLoader struct {
 	// this method provides the data for the loader
 	fetch func(keys *jsonrpc2.JSONRPCRequest) ([]byte, error)
 }
 
-// newSyncLoader creates a new syncLoader given a fetch, wait, and maxBatch
-func newSyncLoader(config syncLoaderConfig) *syncLoader {
-	return &syncLoader{
-		fetch: config.Fetch,
-	}
+// NewSyncLoader creates a new syncLoader given a fetch, wait, and maxBatch
+func NewSyncLoader() (*SyncLoader, error) {
+	return &SyncLoader{}, nil
 }
 
-// Load a request, batching will be applied automatically
-func (l *syncLoader) Load(req *jsonrpc2.JSONRPCRequest) ([]byte, error) {
+// Init initializes the SyncLoader
+func (l *SyncLoader) Init(p *HTTPProvider) {
+	l.fetch = p.fetchSingle
+}
+
+// Load turns a RPCRequest into a byte array response
+func (l *SyncLoader) Load(req *jsonrpc2.JSONRPCRequest) ([]byte, error) {
 	return l.fetch(req)
 }

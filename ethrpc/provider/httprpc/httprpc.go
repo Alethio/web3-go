@@ -25,6 +25,7 @@ type HTTPProvider struct {
 
 type RPCLoader interface {
 	Load(*jsonrpc2.JSONRPCRequest) ([]byte, error)
+	Init(p *HTTPProvider)
 }
 
 // Start does nothing on the http provider
@@ -49,12 +50,12 @@ func (p *HTTPProvider) Call(result interface{}, method string, params ...interfa
 	req := jsonrpc2.BuildRequest(method, params)
 	raw, err := p.loader.Load(req)
 	if err != nil {
-		return fmt.Errorf("call: %s", err)
+		return err
 	}
 
 	resp, err := jsonrpc2.DecodeResponse(raw)
 	if err != nil {
-		return fmt.Errorf("decode rpc message: %s", err)
+		return err
 	}
 
 	null := string(json.RawMessage([]byte("null")))
@@ -89,49 +90,31 @@ func (p *HTTPProvider) Subscribe(receiver chan *json.RawMessage, method string, 
 
 // New initializes a Client and returns it
 func New(url string) (*HTTPProvider, error) {
-	var httpClient = &http.Client{Transport: &http.Transport{}}
-
-	p := &HTTPProvider{
-		url:         url,
-		client:      httpClient,
-		httpTimeout: DefaultHTTPTimeout,
+	loader, err := NewSyncLoader()
+	if err != nil {
+		return nil, err
 	}
-
-	p.loader = newSyncLoader(syncLoaderConfig{
-		Fetch: p.fetchSingle,
-	})
-
-	return p, nil
+	return NewWithLoader(url, loader)
 }
 
-// NewWithBatch initializez a Client with batching and returns it
-func NewWithBatch(url string, batchMaxSize int, batchWait time.Duration) (*HTTPProvider, error) {
-	if batchMaxSize < 0 {
-		return nil, fmt.Errorf("Maximum batch size can not be negative")
+// NewWithLoader initializes a Client with a specified loader and returns it
+func NewWithLoader(url string, loader RPCLoader) (*HTTPProvider, error) {
+	var httpClient = &http.Client{
+		Transport: &http.Transport{},
+		Timeout:   DefaultHTTPTimeout,
 	}
-	if batchWait < 1*time.Millisecond {
-		return nil, fmt.Errorf("Minimum wait time must be at least 1 Millisecond")
-
-	}
-
-	var httpClient = &http.Client{Transport: &http.Transport{}}
 
 	p := &HTTPProvider{
-		url:         url,
-		client:      httpClient,
-		httpTimeout: DefaultHTTPTimeout,
+		url:    url,
+		client: httpClient,
+		loader: loader,
 	}
-
-	p.loader = newBatchLoader(batchLoaderConfig{
-		Wait:     batchWait,
-		MaxBatch: batchMaxSize,
-		Fetch:    p.fetchMultiple,
-	})
-
+	loader.Init(p)
 	return p, nil
+
 }
 
 // SetHTTPTimeout allows setting the http timeout from outside
 func (p *HTTPProvider) SetHTTPTimeout(httpTimeout time.Duration) {
-	p.httpTimeout = httpTimeout
+	p.client.Timeout = httpTimeout
 }

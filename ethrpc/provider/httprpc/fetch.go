@@ -24,6 +24,7 @@ func (p *HTTPProvider) fetchMultiple(requests []*jsonrpc2.JSONRPCRequest) ([][]b
 		return nil, []error{err}
 	}
 
+	logrus.Debugf("Making http request with %d RPCs\n", len(requests))
 	response, err := p.fetch(payload)
 	if err != nil {
 		return [][]byte{}, []error{err}
@@ -38,8 +39,6 @@ func (p *HTTPProvider) fetchMultiple(requests []*jsonrpc2.JSONRPCRequest) ([][]b
 }
 
 func (p *HTTPProvider) fetch(payload []byte) ([]byte, error) {
-	logrus.Debugf("Making request with payload: %s\n", payload)
-
 	httpRequest, err := http.NewRequest("POST", p.url, bytes.NewReader(payload))
 	if err != nil {
 		return nil, err

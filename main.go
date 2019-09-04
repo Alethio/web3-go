@@ -38,7 +38,12 @@ func main() {
 	var e *ethrpc.ETH
 	var err error
 	if batched {
-		provider, err := httprpc.NewWithBatch(ethURL, 0, 4*time.Millisecond)
+		batchLoader, err := httprpc.NewBatchLoader(0, 4*time.Millisecond)
+		if err != nil {
+			log.Fatal(err)
+		}
+		provider, err := httprpc.NewWithLoader(ethURL, batchLoader)
+		provider.SetHTTPTimeout(5000 * time.Millisecond)
 		if err != nil {
 			log.Fatal(err)
 		}
