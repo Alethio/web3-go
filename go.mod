@@ -3,7 +3,6 @@ module github.com/alethio/web3-go
 go 1.12
 
 require (
-	git.aleth.io/ethstats/alerts/backend v0.0.0-20190903051223-ae10fa53c0e2
 	github.com/alethio/ethmock v0.0.0-20190607140831-ce4476424f5c
 	github.com/go-test/deep v1.0.1
 	github.com/gorilla/websocket v1.4.0
