@@ -4,6 +4,7 @@ go 1.12
 
 require (
 	github.com/alethio/ethmock v0.0.0-20190607140831-ce4476424f5c
+	github.com/davecgh/go-spew v1.1.1
 	github.com/go-test/deep v1.0.1
 	github.com/gorilla/websocket v1.4.0
 	github.com/sirupsen/logrus v1.4.2

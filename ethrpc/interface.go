@@ -27,6 +27,8 @@ type ETHInterface interface {
 	GetPeerCount() (peers int64, err error)
 	GetPendingFilterChanges(id string) (t []string, err error)
 	GetPendingTransactions() ([]types.Transaction, error)
+	GetRawBalanceAtBlock(address, blockNumber string) (string, error)
+	GetRawTokenBalanceAtBlock(address, token, blockNumber string) (string, error)
 	GetTokenBalanceAtBlock(address, token, blockNumber string) (*big.Int, error)
 	GetTransactionByHash(hash string) (types.Transaction, error)
 	GetTransactionReceipt(hash string) (r types.Receipt, err error)
