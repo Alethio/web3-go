@@ -158,7 +158,7 @@ func (b *Bookkeeper) fetchRequests(requests []*BalanceRequest, results chan *Raw
 		wg.Wait()
 		close(failed)
 
-		requests := make([]*BalanceRequest, 0, len(requests))
+		requests = make([]*BalanceRequest, 0, len(requests))
 		reqErrors := make([]*RequestError, 0, len(requests))
 
 		for reqError := range failed {
