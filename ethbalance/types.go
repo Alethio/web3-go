@@ -18,11 +18,11 @@ type BlockNumber uint64
 // Address : wrapper type for an ETH address
 type Address string
 
-// RawBalances : the tree-like structure representing all un-parsed balances
-type RawBalances map[BlockNumber]map[Address]map[Source]string
+// RawBalanceSheet : the tree-like structure representing all un-parsed balances
+type RawBalanceSheet map[BlockNumber]map[Address]map[Source]string
 
-// IntBalances : the tree-like structure with all balances converted to big.Int
-type IntBalances map[BlockNumber]map[Address]map[Source]*big.Int
+// IntBalanceSheet : the tree-like structure with all balances converted to big.Int
+type IntBalanceSheet map[BlockNumber]map[Address]map[Source]*big.Int
 
 // Source : either "ETH" or a token address
 type Source string
@@ -39,8 +39,14 @@ type BalanceRequest struct {
 	Source  Source
 }
 
-// BalanceResponse : the response associated with a balance request
-type BalanceResponse struct {
+// RawBalanceResponse : the raw response associated with a balance request
+type RawBalanceResponse struct {
 	Request *BalanceRequest
 	Balance string
+}
+
+// IntBalanceResponse : the converted response associated with a balance request
+type IntBalanceResponse struct {
+	Request *BalanceRequest
+	Balance *big.Int
 }

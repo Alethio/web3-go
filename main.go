@@ -44,7 +44,7 @@ func main() {
 			log.Fatal(err)
 		}
 		provider, err := httprpc.NewWithLoader(ethURL, batchLoader)
-		provider.SetHTTPTimeout(2 * time.Millisecond)
+		// provider.SetHTTPTimeout(2 * time.Millisecond)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -186,14 +186,14 @@ func main() {
 				Block:   7000000,
 			},
 		}
-		rawBalances, err := b.GetRawBalances(requests)
+		rawBalances, err := b.GetRawBalanceSheet(requests)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 		fmt.Println("--------------- Raw Balances -----------------")
 		spew.Dump(rawBalances)
-		intBalances, err := b.GetIntBalances(requests)
+		intBalances, err := b.GetIntBalanceSheet(requests)
 		if err != nil {
 			fmt.Println(err)
 			return

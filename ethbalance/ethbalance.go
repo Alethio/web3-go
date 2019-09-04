@@ -17,37 +17,94 @@ func New(eth ethrpc.ETHInterface, retries uint) *Bookkeeper {
 	}
 }
 
-// GetIntBalances takes a list of balance requests and returns a tree like
-// structure containing all big.Int balances
-func (b *Bookkeeper) GetIntBalances(requests []*BalanceRequest) (IntBalances, error) {
-	balances := make(IntBalances)
-	rawBalances, err := b.GetRawBalances(requests)
+// GetIntBalanceSheet takes a list of balance requests and returns a tree like
+// structure containing all int balances
+func (b *Bookkeeper) GetIntBalanceSheet(requests []*BalanceRequest) (IntBalanceSheet, error) {
+	balances := make(IntBalanceSheet)
+	intResponses, err := b.GetIntBalanceResults(requests)
 	if err != nil {
 		return balances, err
 	}
 
-	for block, addresses := range rawBalances {
-		balances[block] = make(map[Address]map[Source]*big.Int)
-		for address, sources := range addresses {
-			balances[block][address] = make(map[Source]*big.Int)
-			for source, rawBalance := range sources {
-				balance, err := strhelper.HexStrToBigInt(rawBalance)
-				if err != nil {
-					return balances, err
-				}
-				balances[block][address][source] = balance
-			}
+	for _, result := range intResponses {
+		block := result.Request.Block
+		address := result.Request.Address
+		source := result.Request.Source
+
+		if balances[block] == nil {
+			balances[block] = make(map[Address]map[Source]*big.Int)
 		}
+
+		if balances[block][address] == nil {
+			balances[block][address] = make(map[Source]*big.Int)
+
+		}
+
+		balances[block][address][source] = result.Balance
 	}
 	return balances, nil
-
 }
 
-// GetRawBalances takes a list of balance requests and returns a tree like
-// structure containing all string balances
-func (b *Bookkeeper) GetRawBalances(requests []*BalanceRequest) (RawBalances, error) {
-	balances := make(RawBalances)
-	results := make(chan *BalanceResponse)
+// GetRawBalanceSheet takes a list of balance requests and returns a tree like
+// structure containing all hex string balances
+func (b *Bookkeeper) GetRawBalanceSheet(requests []*BalanceRequest) (RawBalanceSheet, error) {
+	balances := make(RawBalanceSheet)
+	rawResponses, err := b.GetRawBalanceResults(requests)
+	if err != nil {
+		return balances, err
+	}
+
+	for _, result := range rawResponses {
+		block := result.Request.Block
+		address := result.Request.Address
+		source := result.Request.Source
+
+		if balances[block] == nil {
+			balances[block] = make(map[Address]map[Source]string)
+		}
+
+		if balances[block][address] == nil {
+			balances[block][address] = make(map[Source]string)
+
+		}
+
+		balances[block][address][source] = result.Balance
+	}
+	return balances, nil
+}
+
+// GetIntBalanceResults returns an array of *big.Int balance results for the provided requests
+func (b *Bookkeeper) GetIntBalanceResults(requests []*BalanceRequest) ([]*IntBalanceResponse, error) {
+	intResponses := make([]*IntBalanceResponse, 0, len(requests))
+	failedRequests := make([]*RequestError, 0, len(requests))
+
+	rawResponses, err := b.GetRawBalanceResults(requests)
+	if err != nil {
+		return nil, err
+	}
+	for _, rawResponse := range rawResponses {
+		intBalance, err := strhelper.HexStrToBigInt(rawResponse.Balance)
+		if err != nil {
+			failedRequests = append(failedRequests, &RequestError{rawResponse.Request, err})
+		} else {
+			intResponses = append(intResponses, &IntBalanceResponse{
+				Request: rawResponse.Request,
+				Balance: intBalance,
+			})
+		}
+	}
+
+	if len(failedRequests) > 0 {
+		return intResponses, DecodeBalancesError{failedRequests}
+	}
+	return intResponses, nil
+}
+
+// GetRawBalanceResults returns an array of hex string balance results for the provided requests
+func (b *Bookkeeper) GetRawBalanceResults(requests []*BalanceRequest) ([]*RawBalanceResponse, error) {
+	results := make(chan *RawBalanceResponse)
+	responses := make([]*RawBalanceResponse, 0, len(requests))
+
 	done := make(chan error, 1)
 
 	go b.fetchRequests(requests, results, done)
@@ -55,27 +112,15 @@ func (b *Bookkeeper) GetRawBalances(requests []*BalanceRequest) (RawBalances, er
 	for {
 		select {
 		case result := <-results:
-			block := result.Request.Block
-			address := result.Request.Address
-			source := result.Request.Source
-
-			if balances[block] == nil {
-				balances[block] = make(map[Address]map[Source]string)
-			}
-
-			if balances[block][address] == nil {
-				balances[block][address] = make(map[Source]string)
-
-			}
-
-			balances[block][address][source] = result.Balance
+			responses = append(responses, result)
 		case err := <-done:
-			return balances, err
+			return responses, err
 		}
 	}
+
 }
 
-func (b *Bookkeeper) fetchRequests(requests []*BalanceRequest, results chan *BalanceResponse, done chan error) {
+func (b *Bookkeeper) fetchRequests(requests []*BalanceRequest, results chan *RawBalanceResponse, done chan error) {
 	var tries uint = 0
 	wg := sync.WaitGroup{}
 
@@ -84,7 +129,7 @@ func (b *Bookkeeper) fetchRequests(requests []*BalanceRequest, results chan *Bal
 		errors := make(chan error, len(requests))
 		for _, request := range requests {
 			wg.Add(1)
-			go func(req *BalanceRequest, results chan *BalanceResponse, failed chan *RequestError) {
+			go func(req *BalanceRequest, results chan *RawBalanceResponse, failed chan *RequestError) {
 				defer wg.Done()
 				var balance string
 				var err error
@@ -101,7 +146,7 @@ func (b *Bookkeeper) fetchRequests(requests []*BalanceRequest, results chan *Bal
 				if err != nil {
 					failed <- &RequestError{req, err}
 				} else {
-					results <- &BalanceResponse{
+					results <- &RawBalanceResponse{
 						Request: req,
 						Balance: balance,
 					}
@@ -132,5 +177,4 @@ func (b *Bookkeeper) fetchRequests(requests []*BalanceRequest, results chan *Bal
 			return
 		}
 	}
-
 }

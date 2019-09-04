@@ -19,11 +19,27 @@ type CollectBalancesError struct {
 
 // Error message aggregates all unique errors
 func (cbe CollectBalancesError) Error() string {
+	fullErrorMessage := renderFullErrorMessage(cbe.Errors)
+	return fmt.Sprintf("Unable to collect balances because of these errors: \n%s", fullErrorMessage)
+}
+
+// DecodeBalancesError wraps errors returned when trying to decode the responses
+type DecodeBalancesError struct {
+	Errors []*RequestError
+}
+
+// Error message aggregates all unique errors
+func (dbe DecodeBalancesError) Error() string {
+	fullErrorMessage := renderFullErrorMessage(dbe.Errors)
+	return fmt.Sprintf("Unable to collect balances because of these errors: \n%s", fullErrorMessage)
+}
+
+func renderFullErrorMessage(errors []*RequestError) string {
 	var fullErrorMessage string
 	errorMessages := make(map[string]string)
 	index := 0
 
-	for _, reqError := range cbe.Errors {
+	for _, reqError := range errors {
 		errorMessageKey := reqError.Err.Error()
 		sectionError, ok := errorMessages[errorMessageKey]
 		if !ok {
@@ -38,5 +54,5 @@ func (cbe CollectBalancesError) Error() string {
 		fullErrorMessage += errorMessage
 	}
 
-	return fmt.Sprintf("Unable to collect balances because of these errors: \n%s", fullErrorMessage)
+	return fullErrorMessage
 }
