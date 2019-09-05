@@ -1,21 +1,31 @@
 package httprpc
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"math/rand"
 	"net/http"
-	"strconv"
+	"time"
 
 	"github.com/alethio/web3-go/etherr"
 	"github.com/alethio/web3-go/jsonrpc2"
 )
 
+const (
+	// DefaultHTTPTimeout is the default timeout interval for http requests
+	DefaultHTTPTimeout = 3 * time.Second
+)
+
+// HTTPProvider implements ethereum RPC calls over HTTP
 type HTTPProvider struct {
-	url    string
-	client *http.Client
+	client      *http.Client
+	url         string
+	loader      RPCLoader
+	httpTimeout time.Duration
+}
+
+type RPCLoader interface {
+	Load(*jsonrpc2.JSONRPCRequest) ([]byte, error)
+	Init(p *HTTPProvider)
 }
 
 // Start does nothing on the http provider
@@ -31,19 +41,21 @@ func (p *HTTPProvider) Stop() {
 
 // CallRaw calls a RPC method and returns the raw result
 func (p *HTTPProvider) CallRaw(method string, params ...interface{}) ([]byte, error) {
-	return p.makeRequest(method, params)
+	req := jsonrpc2.BuildRequest(method, params)
+	return p.loader.Load(req)
 }
 
 // Call calls a RPC method and returns coresponding object
 func (p *HTTPProvider) Call(result interface{}, method string, params ...interface{}) error {
-	response, err := p.makeRequest(method, params)
+	req := jsonrpc2.BuildRequest(method, params)
+	raw, err := p.loader.Load(req)
 	if err != nil {
-		return fmt.Errorf("call: %s", err)
+		return err
 	}
 
-	resp, err := jsonrpc2.DecodeResponse(response)
+	resp, err := jsonrpc2.DecodeResponse(raw)
 	if err != nil {
-		return fmt.Errorf("decode rpc message: %s", err)
+		return err
 	}
 
 	null := string(json.RawMessage([]byte("null")))
@@ -78,41 +90,31 @@ func (p *HTTPProvider) Subscribe(receiver chan *json.RawMessage, method string, 
 
 // New initializes a Client and returns it
 func New(url string) (*HTTPProvider, error) {
-	var httpClient = &http.Client{Transport: &http.Transport{}}
+	loader, err := NewSyncLoader()
+	if err != nil {
+		return nil, err
+	}
+	return NewWithLoader(url, loader)
+}
+
+// NewWithLoader initializes a Client with a specified loader and returns it
+func NewWithLoader(url string, loader RPCLoader) (*HTTPProvider, error) {
+	var httpClient = &http.Client{
+		Transport: &http.Transport{},
+		Timeout:   DefaultHTTPTimeout,
+	}
 
 	p := &HTTPProvider{
 		url:    url,
 		client: httpClient,
+		loader: loader,
 	}
-
+	loader.Init(p)
 	return p, nil
+
 }
 
-func (p *HTTPProvider) makeRequest(method string, params []interface{}) ([]byte, error) {
-	id := strconv.FormatInt(rand.Int63(), 16)
-	rpcRequest, err := jsonrpc2.EncodeClientRequest(method, params, id)
-	if err != nil {
-		return nil, err
-	}
-
-	httpRequest, err := http.NewRequest("POST", p.url, bytes.NewReader(rpcRequest))
-	if err != nil {
-		return nil, err
-	}
-	defer httpRequest.Body.Close()
-
-	httpRequest.Header.Add("Content-Type", "application/json")
-
-	response, err := p.client.Do(httpRequest)
-	if err != nil {
-		return nil, err
-	}
-
-	responseBody, err := ioutil.ReadAll(response.Body)
-	response.Body.Close()
-	if err != nil {
-		return nil, err
-	}
-
-	return responseBody, nil
+// SetHTTPTimeout allows setting the http timeout from outside
+func (p *HTTPProvider) SetHTTPTimeout(httpTimeout time.Duration) {
+	p.client.Timeout = httpTimeout
 }
