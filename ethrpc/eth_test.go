@@ -91,11 +91,12 @@ func TestRequests(t *testing.T) {
 			fn := fmt.Sprintf("../testdata/TraceBlock_%s.golden", blockNumber)
 
 			actual, err := eth.TraceBlock(blockNumber)
+			assert.NoError(t, err)
+
 			thelper.SaveOnUpdate(t, update, fn, actual)
 			var expected []types.Trace
 			thelper.Load(t, fn, &expected)
 
-			assert.NoError(t, err)
 			assert.Equal(t, expected, actual)
 		},
 		"TraceReplayBlockTransactions": func(t *testing.T) {
@@ -103,11 +104,12 @@ func TestRequests(t *testing.T) {
 			fn := fmt.Sprintf("../testdata/TraceReplayBlockTransactions_%s.golden", blockNumber)
 
 			actual, err := eth.TraceReplayBlockTransactions(blockNumber, "vmTrace", "trace", "stateDiff")
+			assert.NoError(t, err)
+
 			thelper.SaveOnUpdate(t, update, fn, actual)
 			var expected []types.TransactionReplay
 			thelper.Load(t, fn, &expected)
 
-			assert.NoError(t, err)
 			assert.Equal(t, expected, actual)
 		},
 	}
