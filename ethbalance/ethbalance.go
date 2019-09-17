@@ -22,10 +22,6 @@ func New(eth ethrpc.ETHInterface, retries uint) *Bookkeeper {
 func (b *Bookkeeper) GetIntBalanceSheet(requests []*BalanceRequest) (IntBalanceSheet, error) {
 	balances := make(IntBalanceSheet)
 	intResponses, err := b.GetIntBalanceResults(requests)
-	if err != nil {
-		return balances, err
-	}
-
 	for _, result := range intResponses {
 		block := result.Request.Block
 		address := result.Request.Address
@@ -42,7 +38,7 @@ func (b *Bookkeeper) GetIntBalanceSheet(requests []*BalanceRequest) (IntBalanceS
 
 		balances[block][address][source] = result.Balance
 	}
-	return balances, nil
+	return balances, err
 }
 
 // GetRawBalanceSheet takes a list of balance requests and returns a tree like
@@ -50,10 +46,6 @@ func (b *Bookkeeper) GetIntBalanceSheet(requests []*BalanceRequest) (IntBalanceS
 func (b *Bookkeeper) GetRawBalanceSheet(requests []*BalanceRequest) (RawBalanceSheet, error) {
 	balances := make(RawBalanceSheet)
 	rawResponses, err := b.GetRawBalanceResults(requests)
-	if err != nil {
-		return balances, err
-	}
-
 	for _, result := range rawResponses {
 		block := result.Request.Block
 		address := result.Request.Address
@@ -70,7 +62,7 @@ func (b *Bookkeeper) GetRawBalanceSheet(requests []*BalanceRequest) (RawBalanceS
 
 		balances[block][address][source] = result.Balance
 	}
-	return balances, nil
+	return balances, err
 }
 
 // GetIntBalanceResults returns an array of *big.Int balance results for the provided requests
@@ -80,8 +72,13 @@ func (b *Bookkeeper) GetIntBalanceResults(requests []*BalanceRequest) ([]*IntBal
 
 	rawResponses, err := b.GetRawBalanceResults(requests)
 	if err != nil {
-		return nil, err
+		if collectError, ok := err.(CollectBalancesError); ok {
+			failedRequests = append(failedRequests, collectError.Errors...)
+		} else {
+			return intResponses, err
+		}
 	}
+
 	for _, rawResponse := range rawResponses {
 		intBalance, err := strhelper.HexStrToBigInt(rawResponse.Balance)
 		if err != nil {
@@ -95,7 +92,7 @@ func (b *Bookkeeper) GetIntBalanceResults(requests []*BalanceRequest) ([]*IntBal
 	}
 
 	if len(failedRequests) > 0 {
-		return intResponses, DecodeBalancesError{failedRequests}
+		return intResponses, CollectBalancesError{failedRequests}
 	}
 	return intResponses, nil
 }
