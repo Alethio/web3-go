@@ -35,10 +35,10 @@ func TestViewCall(t *testing.T) {
 }
 
 func ExampleViwCall() {
-	eth, err := getETH("https://mainnet.infura.io/v3/17ed7fe26d014e5b9be7dfff5368c69d")
+	eth, err := getETH("https://mainnet.infura.io/")
 	vcs := ViewCalls{
 		{
-			Key:       "key.4",
+			Key:       "key.1",
 			Target:    "0x5eb3fa2dfecdde21c950813c665e9364fa609bd2",
 			Method:    "getLastBlockHash()(bytes32)",
 			Arguments: []interface{}{},
