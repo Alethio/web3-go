@@ -38,6 +38,7 @@ type ETHInterface interface {
 	TraceBlock(blockNumber string) ([]types.Trace, error)
 	TraceReplayBlockTransactions(blockNumber string, traceTypes ...string) ([]types.TransactionReplay, error)
 	MakeRequest(result interface{}, method string, params ...interface{}) error
+	MakeRequestRaw(method string, params ...interface{}) ([]byte, error)
 	NewBlockNumberSubscription() (r chan *int64, err error)
 	NewHeadsSubscription() (r chan *types.BlockHeader, err error)
 	NewPendingTransactionsSubscription() (r chan *string, err error)
