@@ -2,16 +2,13 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/alethio/web3-go/ethbalance"
 	"github.com/alethio/web3-go/ethrpc"
 	"github.com/alethio/web3-go/ethrpc/provider/httprpc"
-	"github.com/davecgh/go-spew/spew"
 )
 
 type worker struct {
@@ -19,7 +16,6 @@ type worker struct {
 }
 
 func main() {
-
 	var ethURL string
 	var batched bool
 	flag.StringVar(&ethURL, "eth-client-url", "ws://localhost:8546", "Websockets URL of an Ethereum Client (parity needed)")
@@ -157,49 +153,6 @@ func main() {
 			log.Fatal("Eth failed to get balance: ", err)
 		}
 		log.Println(balance)
-	case "getBalances":
-		b := ethbalance.New(w.eth, 5)
-		requests := []*ethbalance.BalanceRequest{
-			&ethbalance.BalanceRequest{
-				Address: "0xa838e871a02c6d883bf004352fc7dac8f781fed6",
-				Source:  ethbalance.ETH,
-				Block:   7000000,
-			},
-			&ethbalance.BalanceRequest{
-				Address: "0xa838e871a02c6d883bf004352fc7dac8f781fed6",
-				Source:  "0xBEB9eF514a379B997e0798FDcC901Ee474B6D9A1",
-				Block:   7000000,
-			},
-			&ethbalance.BalanceRequest{
-				Address: "0xa838e871a02c6d883bf004352fc7dac8f781fed6",
-				Source:  "0xd26114cd6EE289AccF82350c8d8487fedB8A0C07",
-				Block:   7000000,
-			},
-			&ethbalance.BalanceRequest{
-				Address: "0xa838e871a02c6d883bf004352fc7dac8f781fed6",
-				Source:  "0x8aa33a7899fcc8ea5fbe6a608a109c3893a1b8b2",
-				Block:   7000000,
-			},
-			&ethbalance.BalanceRequest{
-				Address: "0xa838e871a02c6d883bf004352fc7dac8f781fed6",
-				Source:  "0x0f5d2fb29fb7d3cfee444a200298f468908cc942",
-				Block:   7000000,
-			},
-		}
-		rawBalances, err := b.GetRawBalanceSheet(requests)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		fmt.Println("--------------- Raw Balances -----------------")
-		spew.Dump(rawBalances)
-		intBalances, err := b.GetIntBalanceSheet(requests)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		fmt.Println("--------------- big.Int Balances -----------------")
-		spew.Dump(intBalances)
 	default:
 		log.Println("Command not implemented")
 	}
